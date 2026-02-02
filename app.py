@@ -3,19 +3,29 @@ from st_supabase_connection import SupabaseConnection
 import pandas as pd
 import random
 
-# 1. ページ設定とデザイン
-st.set_page_config(page_title="Word Dungeon Pro", page_icon="⚔️", layout="wide")
+# 1. ページ設定と豪華なデザイン
+st.set_page_config(page_title="Word Dungeon: Legend", page_icon="👑", layout="wide")
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f1f5f9; }
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@900&family=Inter:wght@400;700&display=swap');
+    
+    html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #020617; color: #f1f5f9; }
+    
+    /* ボタンデザイン：高級感のあるグラデーション */
     .stButton>button { 
-        width: 100%; border-radius: 12px; height: 60px; font-weight: 600;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        color: white; border: none; transition: all 0.2s;
+        width: 100%; border-radius: 16px; height: 65px; font-weight: 700; font-size: 1.1rem;
+        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+        color: white; border: none; transition: 0.3s;
     }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
-    .status-card { background: #1e293b; padding: 20px; border-radius: 16px; border: 1px solid #334155; margin-bottom: 20px; }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(168, 85, 247, 0.4); }
+    
+    /* リザルトカード */
+    .result-card { 
+        background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+        padding: 40px; border-radius: 24px; border: 2px solid #3b82f6;
+        text-align: center; margin-bottom: 30px;
+    }
+    .rank-s { color: #ffb703; font-size: 80px; font-weight: 900; text-shadow: 0 0 20px #fbbf24; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -24,98 +34,120 @@ SUPABASE_URL = "https://fxzrckbhxqsdslrapmav.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4enJja2JoeHFzZHNscmFwbWF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwMzY4MjYsImV4cCI6MjA4NTYxMjgyNn0.9RNZWdD09IeEiM3O4ji6CyXufMoGi3UzqmKjAkr93sc"
 conn = st.connection("supabase", type=SupabaseConnection, url=SUPABASE_URL, key=SUPABASE_KEY)
 
-# 3. 状態管理（判定ミスを防ぐために重要）
+# 3. 状態管理
 if 'game_started' not in st.session_state: st.session_state.game_started = False
 if 'enemy_hp' not in st.session_state: st.session_state.enemy_hp = 100
 if 'player_hp' not in st.session_state: st.session_state.player_hp = 100
 if 'current_word' not in st.session_state: st.session_state.current_word = None
 if 'choices' not in st.session_state: st.session_state.choices = []
-if 'missed_list' not in st.session_state: st.session_state.missed_list = [] # 今回の冒険で間違えた単語
+if 'session_score' not in st.session_state: st.session_state.session_score = 0
+if 'session_missed' not in st.session_state: st.session_state.session_missed = []
+if 'show_result' not in st.session_state: st.session_state.show_result = False
 
 def fetch_new_word():
-    """新しい単語と選択肢をセットする。再実行で変わらないようsession_stateに保存"""
     res = conn.table("words").select("*").order("miss_count", desc=True).limit(20).execute()
     if res.data:
         word_data = random.choice(res.data)
         st.session_state.current_word = word_data
         st.session_state.enemy_hp = 100
         
-        # 選択肢の作成（ここも固定する）
+        # 選択肢の固定
         correct_id = word_data['id']
-        all_words = conn.table("words").select("id, meaning").limit(20).execute().data
+        all_words = conn.table("words").select("id, meaning").limit(30).execute().data
         dummies = [w for w in all_words if w['id'] != correct_id]
         raw_choices = random.sample(dummies, 3) + [{'id': correct_id, 'meaning': word_data['meaning']}]
         random.shuffle(raw_choices)
         st.session_state.choices = raw_choices
 
-# --- メインロジック ---
-tab1, tab2 = st.tabs(["🎮 ダンジョン攻略", "⚙️ 単語管理"])
+# --- メイン画面 ---
+tab1, tab2 = st.tabs(["⚔️ DUNGEON", "🛠️ ADMIN"])
 
 with tab1:
-    if not st.session_state.game_started:
-        st.title("🛡️ WORD DUNGEON PRO")
+    # A. 戦績（リザルト）画面
+    if st.session_state.show_result:
+        st.markdown('<div class="result-card">', unsafe_allow_html=True)
+        score = st.session_state.session_score
+        rank = "S" if score >= 10 else "A" if score >= 7 else "B" if score >= 4 else "C"
+        st.markdown(f'<div class="rank-s">{rank}</div>', unsafe_allow_html=True)
+        st.subheader(f"冒険終了！討伐数: {score}")
         
-        # 前回の戦績表示
-        if st.session_state.missed_list:
-            st.error("前回の冒険で間違えた単語リスト:")
-            st.write(", ".join(list(set(st.session_state.missed_list))))
-            if st.button("戦績をクリアして新しく始める"):
-                st.session_state.missed_list = []
-                st.rerun()
-        else:
-            if st.button("🚀 探索を開始する"):
+        if st.session_state.session_missed:
+            st.write("--- 復習すべき苦手モンスター ---")
+            missed_df = pd.DataFrame(st.session_state.session_missed).drop_duplicates()
+            st.table(missed_df)
+            
+        if st.button("拠点を立て直して再出撃"):
+            st.session_state.show_result = False
+            st.session_state.session_score = 0
+            st.session_state.session_missed = []
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # B. スタート画面
+    elif not st.session_state.game_started:
+        st.title("🛡️ WORD DUNGEON LEGEND")
+        col_start, _ = st.columns([1, 2])
+        with col_start:
+            if st.button("🔥 ダンジョンに潜入"):
                 st.session_state.game_started = True
                 st.session_state.player_hp = 100
-                st.session_state.missed_list = []
                 fetch_new_word()
                 st.rerun()
+
+    # C. バトル画面
     else:
-        # --- バトル画面 ---
-        st.markdown('<div class="status-card">', unsafe_allow_html=True)
-        col_hp1, col_hp2 = st.columns(2)
-        with col_hp1:
-            st.write(f"❤️ PLAYER HP: {st.session_state.player_hp}%")
-            st.progress(max(0, st.session_state.player_hp) / 100)
-        with col_hp2:
-            st.write(f"👾 ENEMY HP: {st.session_state.enemy_hp}%")
-            st.progress(max(0, st.session_state.enemy_hp) / 100)
+        st.markdown(f'<div style="background:#1e293b; padding:20px; border-radius:20px; border-left:10px solid #6366f1;">', unsafe_allow_html=True)
+        hp_col1, hp_col2 = st.columns(2)
+        hp_col1.metric("PLAYER HP", f"{st.session_state.player_hp}%")
+        hp_col2.metric("ENEMY HP", f"{st.session_state.enemy_hp}%")
         
         word_data = st.session_state.current_word
-        st.subheader(f"英単語モンスター: {word_data['word']}")
+        st.title(f"👾 {word_data['word']}")
         
-        # ボタンクリック時の判定
-        correct_id = word_data['id']
         cols = st.columns(2)
         for i, choice in enumerate(st.session_state.choices):
             with cols[i % 2]:
                 if st.button(choice['meaning'], key=f"c_{i}"):
-                    if choice['id'] == correct_id:
-                        st.toast("⭕ クリティカル！", icon="⚔️")
-                        st.session_state.enemy_hp -= 34
-                        conn.table("words").update({"correct_count": word_data['correct_count'] + 1}).eq("id", correct_id).execute()
+                    if choice['id'] == word_data['id']:
+                        st.success("⭕ クリティカル！")
+                        st.session_state.enemy_hp -= 50 # 2撃で討伐
                         if st.session_state.enemy_hp <= 0:
+                            st.session_state.session_score += 1
+                            conn.table("words").update({"correct_count": word_data['correct_count'] + 1}).eq("id", word_data['id']).execute()
                             fetch_new_word()
-                            st.rerun()
                     else:
-                        st.toast(f"❌ 痛恨！ 正解は「{word_data['meaning']}」", icon="⚠️")
-                        st.session_state.player_hp -= 20
-                        st.session_state.missed_list.append(word_data['word']) # 間違えた単語を記録
-                        conn.table("words").update({"miss_count": word_data['miss_count'] + 1}).eq("id", correct_id).execute()
+                        st.error(f"❌ 被弾！ 正解は「{word_data['meaning']}」")
+                        st.session_state.player_hp -= 25
+                        st.session_state.session_missed.append({"英単語": word_data['word'], "意味": word_data['meaning']})
+                        conn.table("words").update({"miss_count": word_data['miss_count'] + 1}).eq("id", word_data['id']).execute()
                     
                     if st.session_state.player_hp <= 0:
                         st.session_state.game_started = False
+                        st.session_state.show_result = True
                     st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
-        if st.button("🏃 撤退する"):
-            st.session_state.game_started = False
-            st.rerun()
 
+# --- Tab 2: 単語管理 ---
 with tab2:
-    st.header("⚙️ 単語追加")
-    with st.form("add_word", clear_on_submit=True):
+    st.header("⚙️ データベース管理")
+    
+    if st.button("📦 サンプル単語リストを一括追加"):
+        sample_words = [
+            {"word": "Reluctant", "meaning": "気が進まない"},
+            {"word": "Meticulous", "meaning": "細心の注意を払った"},
+            {"word": "Persistent", "meaning": "粘り強い"},
+            {"word": "Vague", "meaning": "曖昧な"},
+            {"word": "Submit", "meaning": "提出する"},
+            {"word": "Inherent", "meaning": "固有の"}
+        ]
+        for sw in sample_words:
+            conn.table("words").insert(sw).execute()
+        st.success("追加完了！")
+    
+    st.divider()
+    with st.form("manual_add", clear_on_submit=True):
         w = st.text_input("英単語")
         m = st.text_input("意味")
         if st.form_submit_button("追加"):
-            if w and m:
-                conn.table("words").insert({"word": w, "meaning": m}).execute()
-                st.success("追加しました")
+            conn.table("words").insert({"word": w, "meaning": m}).execute()
+            st.rerun()
