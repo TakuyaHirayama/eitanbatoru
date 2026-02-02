@@ -12,7 +12,7 @@ st.markdown("""
     }
     .stButton>button { width: 100%; border: 3px solid #e94560; }
     </style>
-    """, unsafe_allow_index=True)
+    """, unsafe_allow_html=True)
 
 # 2. Supabase接続 (Secrets管理)
 conn = st.connection("supabase", type=SupabaseConnection)
